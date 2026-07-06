@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect, type DragEvent, type ChangeEvent } from "react";
-import { Upload, FileText, CheckCircle2, AlertCircle, X, FileWarning, ExternalLink, ShieldCheck, Clock, PenLine } from "lucide-react";
+import { Upload, FileText, CheckCircle2, AlertCircle, X, FileWarning, ExternalLink, ShieldCheck, Clock, PenLine, Search } from "lucide-react";
 import { cn, formatBytes } from "@/lib/utils";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -354,10 +354,17 @@ export function UploadContract() {
                   )}
                 </div>
 
-                {/* Upload another */}
+                {/* Success navigation */}
                 <Button onClick={reset} variant="ghost" className="w-full text-sm">
                   Upload another file
                 </Button>
+                <a
+                  href="/status"
+                  className="flex items-center justify-center gap-1.5 text-sm text-brand-600 hover:text-brand-700 font-medium transition-colors"
+                >
+                  <Search className="w-3.5 h-3.5" />
+                  Check signature status
+                </a>
               </div>
             )}
 
@@ -493,15 +500,24 @@ export function UploadContract() {
           </CardContent>
         </Card>
 
-        {/* Guidelines */}
+        {/* Navigation & Guidelines */}
         {uploadState === "idle" && (
-          <div className="text-center">
-            <p className="text-xs text-gray-400">
-              By uploading, you agree to our{" "}
-              <span className="underline underline-offset-2 cursor-default">Terms of Service</span>{" "}
-              and{" "}
-              <span className="underline underline-offset-2 cursor-default">Privacy Policy</span>
-            </p>
+          <div className="space-y-4">
+            <a
+              href="/status"
+              className="flex items-center justify-center gap-2 text-sm text-brand-600 hover:text-brand-700 font-medium transition-colors"
+            >
+              <Search className="w-4 h-4" />
+              Check signature status
+            </a>
+            <div className="text-center">
+              <p className="text-xs text-gray-400">
+                By uploading, you agree to our{" "}
+                <span className="underline underline-offset-2 cursor-default">Terms of Service</span>{" "}
+                and{" "}
+                <span className="underline underline-offset-2 cursor-default">Privacy Policy</span>
+              </p>
+            </div>
           </div>
         )}
       </div>

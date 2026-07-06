@@ -232,6 +232,28 @@ router.post("/contracts/:id/sign", (req, res) => {
   res.json(contract.signature);
 });
 
+// Look up signature status by signatureId (simulates Setu API check)
+router.get("/signatures/:signatureId/status", (req, res) => {
+  const { signatureId } = req.params;
+
+  const contract = contracts.find((c) => c.signature.signatureId === signatureId);
+  if (!contract) {
+    res.status(404).json({ error: "Signature not found" });
+    return;
+  }
+
+  // Simulate what Setu would return
+  res.json({
+    signatureId: contract.signature.signatureId,
+    documentId: contract.documentId,
+    originalName: contract.originalName,
+    status: contract.signature.status,
+    createdAt: contract.signature.createdAt,
+    signedAt: contract.signature.signedAt,
+    signedDocumentAvailable: contract.signature.status === "signed",
+  });
+});
+
 // Look up signature by documentId (used by the signing page)
 router.get("/documents/:documentId/signature", (req, res) => {
   const { documentId } = req.params;
@@ -266,6 +288,68 @@ router.post("/documents/:documentId/sign", (req, res) => {
 
   console.log(`Document signed: ${contract.documentId}`);
   res.json(contract.signature);
+});
+
+// Download a signed document by contract ID
+router.get("/contracts/:id/download", (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) {
+    res.status(400).json({ error: "Invalid contract ID" });
+    return;
+  }
+
+  const contract = contracts.find((c) => c.id === id);
+  if (!contract) {
+    res.status(404).json({ error: "Contract not found" });
+    return;
+  }
+
+  if (contract.signature.status !== "signed") {
+    res.status(400).json({ error: "Document has not been signed yet" });
+    return;
+  }
+
+  const filePath = path.join(uploadDir, contract.filename);
+  if (!fs.existsSync(filePath)) {
+    res.status(404).json({ error: "Signed document file not found" });
+    return;
+  }
+
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader(
+    "Content-Disposition",
+    `attachment; filename="signed_${contract.originalName}"`
+  );
+  res.sendFile(filePath);
+});
+
+// Download a signed document by signature ID
+router.get("/signatures/:signatureId/download", (req, res) => {
+  const { signatureId } = req.params;
+
+  const contract = contracts.find((c) => c.signature.signatureId === signatureId);
+  if (!contract) {
+    res.status(404).json({ error: "Signature not found" });
+    return;
+  }
+
+  if (contract.signature.status !== "signed") {
+    res.status(400).json({ error: "Document has not been signed yet" });
+    return;
+  }
+
+  const filePath = path.join(uploadDir, contract.filename);
+  if (!fs.existsSync(filePath)) {
+    res.status(404).json({ error: "Signed document file not found" });
+    return;
+  }
+
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader(
+    "Content-Disposition",
+    `attachment; filename="signed_${contract.originalName}"`
+  );
+  res.sendFile(filePath);
 });
 
 // Delete a contract
