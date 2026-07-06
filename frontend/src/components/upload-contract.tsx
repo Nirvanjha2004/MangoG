@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect, type DragEvent, type ChangeEvent } from "react";
-import { Upload, FileText, CheckCircle2, AlertCircle, X, FileWarning } from "lucide-react";
+import { Upload, FileText, CheckCircle2, AlertCircle, X, FileWarning, ExternalLink, ShieldCheck, Clock, PenLine } from "lucide-react";
 import { cn, formatBytes } from "@/lib/utils";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -10,11 +10,20 @@ const ACCEPTED_TYPES = ["application/pdf"];
 const ACCEPTED_EXTENSIONS = [".pdf"];
 
 type UploadState = "idle" | "dragging" | "uploading" | "success" | "error";
-type ErrorType = "invalid-type" | "too-large" | null;
+type ErrorType = "invalid-type" | "too-large" | "upload-failed" | null;
 
 interface FileInfo {
   name: string;
   size: number;
+}
+
+interface UploadResult {
+  documentId: string;
+  signatureId: string;
+  signatureUrl: string;
+  status: string;
+  originalName: string;
+  sizeBytes: number;
 }
 
 export function UploadContract() {
@@ -22,14 +31,17 @@ export function UploadContract() {
   const [progress, setProgress] = useState(0);
   const [errorType, setErrorType] = useState<ErrorType>(null);
   const [fileInfo, setFileInfo] = useState<FileInfo | null>(null);
+  const [uploadResult, setUploadResult] = useState<UploadResult | null>(null);
+  const [signingMode, setSigningMode] = useState<"tab" | "iframe">("tab");
+  const [iframeVisible, setIframeVisible] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
-  // Cleanup interval on unmount
+  // Cleanup on unmount
   useEffect(() => {
     return () => {
-      if (intervalRef.current !== null) {
-        clearInterval(intervalRef.current);
+      if (abortRef.current) {
+        abortRef.current.abort();
       }
     };
   }, []);
@@ -45,25 +57,49 @@ export function UploadContract() {
     return null;
   }, []);
 
-  const simulateUpload = useCallback(() => {
-    setProgress(0);
-    if (intervalRef.current !== null) {
-      clearInterval(intervalRef.current);
-    }
-    intervalRef.current = setInterval(() => {
-      setProgress((prev) => {
-        if (prev >= 100) {
-          if (intervalRef.current !== null) {
-            clearInterval(intervalRef.current);
-            intervalRef.current = null;
-          }
-          setUploadState("success");
-          return 100;
-        }
-        const increment = prev < 50 ? 8 : prev < 80 ? 5 : 2;
-        return Math.min(prev + increment, 100);
+  const uploadFile = useCallback(async (file: File) => {
+    const formData = new FormData();
+    formData.append("file", file);
+
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    try {
+      let progressValue = 0;
+      const progressInterval = setInterval(() => {
+        progressValue = Math.min(progressValue + Math.random() * 15, 90);
+        setProgress(progressValue);
+      }, 200);
+
+      const response = await fetch("/api/contracts/upload", {
+        method: "POST",
+        body: formData,
+        signal: controller.signal,
       });
-    }, 200);
+
+      clearInterval(progressInterval);
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.error || `Upload failed (${response.status})`);
+      }
+
+      const result: UploadResult = await response.json();
+      setUploadResult(result);
+      setProgress(100);
+      setFileInfo({ name: result.originalName, size: result.sizeBytes });
+
+      await new Promise((r) => setTimeout(r, 400));
+      setUploadState("success");
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name === "AbortError") {
+        return;
+      }
+      setErrorType("upload-failed");
+      setUploadState("error");
+    } finally {
+      abortRef.current = null;
+    }
   }, []);
 
   const handleFile = useCallback((file: File) => {
@@ -76,8 +112,10 @@ export function UploadContract() {
 
     setFileInfo({ name: file.name, size: file.size });
     setUploadState("uploading");
-    simulateUpload();
-  }, [validateFile, simulateUpload]);
+    setProgress(0);
+
+    uploadFile(file);
+  }, [validateFile, uploadFile]);
 
   const handleDragOver = useCallback((e: DragEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -115,14 +153,26 @@ export function UploadContract() {
   }, []);
 
   const reset = useCallback(() => {
-    if (intervalRef.current !== null) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = null;
+    if (abortRef.current) {
+      abortRef.current.abort();
+      abortRef.current = null;
     }
     setUploadState("idle");
     setProgress(0);
     setErrorType(null);
     setFileInfo(null);
+    setUploadResult(null);
+    setIframeVisible(false);
+  }, []);
+
+  const openSigningTab = useCallback(() => {
+    if (uploadResult?.signatureUrl) {
+      window.open(uploadResult.signatureUrl, "_blank", "noopener,noreferrer");
+    }
+  }, [uploadResult]);
+
+  const toggleIframe = useCallback(() => {
+    setIframeVisible((v) => !v);
   }, []);
 
   const getErrorTitle = () => {
@@ -132,7 +182,7 @@ export function UploadContract() {
       case "too-large":
         return "File too large";
       default:
-        return "Something went wrong";
+        return "Upload failed";
     }
   };
 
@@ -143,7 +193,7 @@ export function UploadContract() {
       case "too-large":
         return `File exceeds the maximum size of ${formatBytes(MAX_FILE_SIZE)}. Please compress your file and try again.`;
       default:
-        return "An unexpected error occurred. Please try again.";
+        return "There was an error uploading your file. The server may be unavailable. Please try again.";
     }
   };
 
@@ -168,25 +218,144 @@ export function UploadContract() {
           <CardContent className="p-0">
             {/* Success State */}
             {uploadState === "success" && (
-              <div className="p-10 text-center space-y-5">
-                <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-emerald-100">
-                  <CheckCircle2 className="w-8 h-8 text-emerald-600" />
-                </div>
-                <div className="space-y-1">
-                  <h3 className="text-lg font-semibold text-gray-900">Upload complete!</h3>
+              <div className="p-8 space-y-6">
+                {/* Checkmark header */}
+                <div className="text-center space-y-2">
+                  <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-emerald-100">
+                    <CheckCircle2 className="w-7 h-7 text-emerald-600" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-gray-900">
+                    Upload complete!
+                  </h3>
                   <p className="text-sm text-gray-500">
-                    {fileInfo?.name} has been uploaded successfully.
+                    Your contract has been uploaded and a signature request has been created.
                   </p>
                 </div>
+
+                {/* File badge */}
                 {fileInfo && (
-                  <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-gray-50 rounded-lg text-sm text-gray-600">
+                  <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-gray-50 rounded-lg text-sm text-gray-600 mx-auto w-fit">
                     <FileText className="w-4 h-4 text-gray-400" />
-                    <span className="truncate max-w-[200px]">{fileInfo.name}</span>
+                    <span className="truncate max-w-[180px]">{fileInfo.name}</span>
                     <span className="text-gray-400">·</span>
-                    <span>{fileInfo ? formatBytes(fileInfo.size) : ""}</span>
+                    <span>{formatBytes(fileInfo.size)}</span>
                   </div>
                 )}
-                <Button onClick={reset} variant="secondary" className="mt-2">
+
+                {/* Signature metadata */}
+                {uploadResult && (
+                  <div className="space-y-3">
+                    <h4 className="text-sm font-medium text-gray-700 flex items-center gap-1.5">
+                      <ShieldCheck className="w-4 h-4 text-brand-500" />
+                      Signature details
+                    </h4>
+                    <div className="bg-gray-50 rounded-lg divide-y divide-gray-100 text-sm">
+                      <div className="flex items-center justify-between px-4 py-2.5">
+                        <span className="text-gray-500">Document ID</span>
+                        <span className="font-mono text-xs text-gray-800 truncate ml-4">
+                          {uploadResult.documentId}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between px-4 py-2.5">
+                        <span className="text-gray-500">Signature ID</span>
+                        <span className="font-mono text-xs text-gray-800 truncate ml-4">
+                          {uploadResult.signatureId}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between px-4 py-2.5">
+                        <span className="text-gray-500">Status</span>
+                        <span className="inline-flex items-center gap-1 text-amber-600 font-medium">
+                          <Clock className="w-3.5 h-3.5" />
+                          Pending signature
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Signing options */}
+                <div className="space-y-3">
+                  <h4 className="text-sm font-medium text-gray-700 flex items-center gap-1.5">
+                    <PenLine className="w-4 h-4 text-brand-500" />
+                    Signing options
+                  </h4>
+
+                  {/* Toggle: tab vs iframe */}
+                  <div className="flex gap-2 bg-gray-100 rounded-lg p-1">
+                    <button
+                      onClick={() => setSigningMode("tab")}
+                      className={cn(
+                        "flex-1 px-3 py-2 text-sm font-medium rounded-md transition-all",
+                        signingMode === "tab"
+                          ? "bg-white text-gray-900 shadow-sm"
+                          : "text-gray-500 hover:text-gray-700"
+                      )}
+                    >
+                      <ExternalLink className="w-4 h-4 inline mr-1.5" />
+                      New tab
+                    </button>
+                    <button
+                      onClick={() => setSigningMode("iframe")}
+                      className={cn(
+                        "flex-1 px-3 py-2 text-sm font-medium rounded-md transition-all",
+                        signingMode === "iframe"
+                          ? "bg-white text-gray-900 shadow-sm"
+                          : "text-gray-500 hover:text-gray-700"
+                      )}
+                    >
+                      <FileText className="w-4 h-4 inline mr-1.5" />
+                      Embedded
+                    </button>
+                  </div>
+
+                  {signingMode === "tab" ? (
+                    <Button
+                      onClick={openSigningTab}
+                      variant="primary"
+                      className="w-full"
+                    >
+                      <ExternalLink className="w-4 h-4" />
+                      Open signing page
+                    </Button>
+                  ) : (
+                    <div className="space-y-2">
+                      <Button
+                        onClick={toggleIframe}
+                        variant={iframeVisible ? "secondary" : "primary"}
+                        className="w-full"
+                      >
+                        {iframeVisible ? "Hide signing page" : "Show signing page"}
+                      </Button>
+                      {iframeVisible && uploadResult && (
+                        <div className="border border-gray-200 rounded-lg overflow-hidden">
+                          <iframe
+                            src={uploadResult.signatureUrl}
+                            className="w-full h-[400px] bg-white"
+                            title="Sign Document"
+                            sandbox="allow-scripts allow-same-origin"
+                          />
+                          <div className="bg-gray-50 px-4 py-2 border-t border-gray-200 flex items-center justify-between">
+                            <span className="text-xs text-gray-400">
+                              Embedded signing view
+                            </span>
+                            <a
+                              href={uploadResult.signatureUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs text-brand-600 hover:text-brand-700 font-medium inline-flex items-center gap-1"
+                            >
+                              Open in new tab
+                              <ExternalLink className="w-3 h-3" />
+                            </a>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Upload another */}
+                <Button onClick={reset} variant="ghost" className="w-full text-sm">
                   Upload another file
                 </Button>
               </div>
@@ -215,7 +384,6 @@ export function UploadContract() {
                   <Button
                     onClick={() => {
                       reset();
-                      // Small delay to ensure state resets before file picker opens
                       setTimeout(handleClickInput, 50);
                     }}
                     variant="primary"
@@ -252,12 +420,7 @@ export function UploadContract() {
                     <X className="w-4 h-4" />
                   </button>
                 </div>
-                <Progress
-                  value={progress}
-                  variant="default"
-                  size="md"
-                  showLabel
-                />
+                <Progress value={progress} variant="default" size="md" showLabel />
                 <p className="text-xs text-gray-400 text-center">
                   Please don't close this page while uploading
                 </p>
@@ -291,6 +454,7 @@ export function UploadContract() {
                 <input
                   ref={inputRef}
                   type="file"
+                  name="file"
                   accept=".pdf,application/pdf"
                   onChange={handleInputChange}
                   className="hidden"

@@ -1,0 +1,18 @@
+# dependencies
+node_modules/
+.pnpm-store/
+
+# build output
+dist/
+*.tsbuildinfo
+
+# env files
+.env
+.env.*
+
+# uploaded files - user data, not committed
+uploads/
+
+# logs
+*.log
+npm-debug.log*
