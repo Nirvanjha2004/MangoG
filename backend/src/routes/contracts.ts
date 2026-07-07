@@ -322,7 +322,9 @@ router.post("/upload-contract", (req, res) => {
       // If Setu is not configured, fall back to a mock signature
       const mockSigId = `sig_${crypto.randomBytes(12).toString("hex")}`;
       setuSignatureId = mockSigId;
-      signatureUrl = `${req.protocol}://${req.get("host") || "localhost:3001"}/sign/${documentId}`;
+      // Use Origin header (frontend URL) if available, otherwise fall back to host
+      const frontendUrl = req.get("origin") || `${req.protocol}://${req.get("host") || "localhost:5173"}`;
+      signatureUrl = `${frontendUrl}/sign/${documentId}`;
 
       if (
         process.env.SETU_X_CLIENT_ID &&
