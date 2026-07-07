@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback, useEffect, type DragEvent, type ChangeEvent } from "react";
 import { Upload, FileText, CheckCircle2, AlertCircle, X, FileWarning, ExternalLink, ShieldCheck, Clock, PenLine, Search } from "lucide-react";
 import { cn, formatBytes } from "@/lib/utils";
+import { apiFetch } from "@/lib/api";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -72,7 +73,7 @@ export function UploadContract() {
         setProgress(progressValue);
       }, 200);
 
-      const response = await fetch("/api/upload-contract", {
+      const response = await apiFetch("/api/upload-contract", {
         method: "POST",
         body: formData,
         signal: controller.signal,

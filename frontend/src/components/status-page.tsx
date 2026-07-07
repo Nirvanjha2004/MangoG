@@ -14,6 +14,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { apiFetch } from "@/lib/api";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { NavHeader } from "@/components/nav-header";
@@ -61,7 +62,7 @@ export function StatusPage() {
 
     pollingRef.current = setInterval(async () => {
       try {
-        const res = await fetch(`/api/signature-status/${encodeURIComponent(signatureId)}`);
+        const res = await apiFetch(`/api/signature-status/${encodeURIComponent(signatureId)}`);
         if (!res.ok) return;
         const data: SignatureStatus = await res.json();
         setSignatureStatus(data);
@@ -89,7 +90,7 @@ export function StatusPage() {
     let cancelled = false;
     async function fetchContracts() {
       try {
-        const res = await fetch("/api/contracts");
+        const res = await apiFetch("/api/contracts");
         if (!res.ok) throw new Error("Failed to fetch contracts");
         const data: ContractSummary[] = await res.json();
         if (!cancelled) setContracts(data);
@@ -113,7 +114,7 @@ export function StatusPage() {
     setSignatureStatus(null);
 
     try {
-      const res = await fetch(`/api/signatures/${encodeURIComponent(trimmed)}/status`);
+      const res = await apiFetch(`/api/signature-status/${encodeURIComponent(trimmed)}`);
       if (!res.ok) {
         if (res.status === 404) {
           setSearchError("Signature not found. Please check the ID and try again.");
@@ -158,7 +159,7 @@ export function StatusPage() {
     if (!signatureStatus?.signatureId) return;
     setDownloading(true);
     try {
-      const res = await fetch(
+      const res = await apiFetch(
         `/api/download/${encodeURIComponent(signatureStatus.signatureId)}`
       );
       if (!res.ok) {

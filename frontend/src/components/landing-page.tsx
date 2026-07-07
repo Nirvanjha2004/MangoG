@@ -10,6 +10,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { cn, formatBytes } from "@/lib/utils";
+import { apiFetch } from "@/lib/api";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { NavHeader } from "@/components/nav-header";
@@ -70,7 +71,7 @@ export function LandingPage() {
     let cancelled = false;
     async function fetchRecent() {
       try {
-        const res = await fetch("/api/contracts");
+        const res = await apiFetch("/api/contracts");
         if (!res.ok) throw new Error("Failed to fetch");
         const data: RecentContract[] = await res.json();
         if (!cancelled) setRecentContracts(data.slice(0, 5));

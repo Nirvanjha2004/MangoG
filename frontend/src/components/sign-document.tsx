@@ -15,6 +15,7 @@ import {
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { NavHeader } from "@/components/nav-header";
+import { apiFetch } from "@/lib/api";
 
 interface SignatureData {
   signatureId: string;
@@ -43,7 +44,7 @@ export function SignDocument() {
     }
 
     try {
-      const res = await fetch(`/api/documents/${documentId}/signature`);
+      const res = await apiFetch(`/api/documents/${documentId}/signature`);
       if (!res.ok) {
         if (res.status === 404) {
           setError("Document not found. The signing link may be invalid.");
@@ -79,7 +80,7 @@ export function SignDocument() {
     setError(null);
 
     try {
-      const res = await fetch(`/api/documents/${documentId}/sign`, {
+      const res = await apiFetch(`/api/documents/${documentId}/sign`, {
         method: "POST",
       });
 
@@ -104,7 +105,7 @@ export function SignDocument() {
     if (!signature?.signatureId) return;
     setDownloading(true);
     try {
-      const res = await fetch(
+      const res = await apiFetch(
         `/api/download/${encodeURIComponent(signature.signatureId)}`
       );
       if (!res.ok) {
