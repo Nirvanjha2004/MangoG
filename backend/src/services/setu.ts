@@ -13,6 +13,7 @@ export interface SetuSignerInput {
   identifier: string;
   displayName: string;
   birthYear?: string;
+  signerNo?: number;
   signature?: {
     onPages: string[];
     position: string;
