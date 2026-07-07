@@ -10,6 +10,7 @@ import {
   getSignatureStatus,
   downloadSignedDocument,
 } from "../services/setu.js";
+import * as supabase from "../services/supabase.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -41,8 +42,14 @@ interface Contract {
   signature: SignatureInfo;
 }
 
-let contracts: Contract[] = [];
-let nextId = 1;
+// ── In-memory fallback storage (used when Supabase is not configured) ──
+
+let memoryContracts: Contract[] = [];
+let memoryNextId = 1;
+
+function isSupabaseConfigured(): boolean {
+  return !!(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
+}
 
 // ── File upload setup ──
 
@@ -115,16 +122,127 @@ function mapSetuStatus(
   }
 }
 
-// ── Routes ──
+// ── Storage adapters (Supabase vs in-memory) ──
 
-// ──────────────────────────────────────────────
-//  User-requested Setu-integrated routes
-// ──────────────────────────────────────────────
+async function storeContract(contract: Contract): Promise<void> {
+  if (isSupabaseConfigured()) {
+    try {
+      await supabase.createContract({
+        documentId: contract.documentId,
+        filename: contract.filename,
+        originalName: contract.originalName,
+        sizeBytes: contract.sizeBytes,
+        notes: contract.notes,
+        signatureId: contract.signature.signatureId,
+        signatureUrl: contract.signature.signatureUrl,
+        signatureStatus: contract.signature.status,
+        setuDocumentId: contract.signature.setuDocumentId,
+        storageFilePath: undefined,
+      });
+      return;
+    } catch (err) {
+      console.error("[DB] Supabase store failed, falling back to memory:", err);
+    }
+  }
+  memoryContracts.push(contract);
+}
+
+async function findAllContracts(): Promise<Contract[]> {
+  if (isSupabaseConfigured()) {
+    try {
+      return await supabase.getAllContracts();
+    } catch (err) {
+      console.error("[DB] Supabase query failed, falling back to memory:", err);
+    }
+  }
+  return [...memoryContracts].reverse();
+}
+
+async function findContractBySignatureId(
+  signatureId: string
+): Promise<Contract | null> {
+  if (isSupabaseConfigured()) {
+    try {
+      return await supabase.getContractBySignatureId(signatureId);
+    } catch (err) {
+      console.error("[DB] Supabase query failed, falling back to memory:", err);
+    }
+  }
+  return memoryContracts.find((c) => c.signature.signatureId === signatureId) || null;
+}
+
+async function findContractById(id: number): Promise<Contract | null> {
+  if (isSupabaseConfigured()) {
+    try {
+      return await supabase.getContractById(id);
+    } catch (err) {
+      console.error("[DB] Supabase query failed, falling back to memory:", err);
+    }
+  }
+  return memoryContracts.find((c) => c.id === id) || null;
+}
+
+async function findContractByDocumentId(
+  documentId: string
+): Promise<Contract | null> {
+  if (isSupabaseConfigured()) {
+    try {
+      return await supabase.getContractByDocumentId(documentId);
+    } catch (err) {
+      console.error("[DB] Supabase query failed, falling back to memory:", err);
+    }
+  }
+  return memoryContracts.find((c) => c.documentId === documentId) || null;
+}
+
+async function updateContractSignature(
+  signatureId: string,
+  status: SignatureStatus,
+  signedAt: string | null
+): Promise<void> {
+  if (isSupabaseConfigured()) {
+    try {
+      await supabase.updateSignature(signatureId, {
+        status,
+        signedAt,
+        contractStatus: status === "signed" ? "processed" : undefined,
+      });
+      return;
+    } catch (err) {
+      console.error("[DB] Supabase update failed, falling back to memory:", err);
+    }
+  }
+  const contract = memoryContracts.find((c) => c.signature.signatureId === signatureId);
+  if (contract) {
+    contract.signature.status = status;
+    if (signedAt) contract.signature.signedAt = signedAt;
+    if (status === "signed") contract.status = "processed";
+  }
+}
+
+async function removeContract(id: number): Promise<Contract | null> {
+  if (isSupabaseConfigured()) {
+    try {
+      const contract = await supabase.getContractById(id);
+      if (contract) {
+        await supabase.deleteContract(id);
+      }
+      return contract;
+    } catch (err) {
+      console.error("[DB] Supabase delete failed, falling back to memory:", err);
+    }
+  }
+  const index = memoryContracts.findIndex((c) => c.id === id);
+  if (index === -1) return null;
+  const [contract] = memoryContracts.splice(index, 1);
+  return contract;
+}
+
+// ── Routes ──
 
 /**
  * POST /api/upload-contract
- * Upload a PDF and create a Setu e-signature request in one call.
- * Returns the signature ID, Setu signing URL, and document metadata.
+ * Upload a PDF, store it, and create a Setu e-signature request.
  */
 router.post("/upload-contract", (req, res) => {
   upload.single("file")(req, res, async (err) => {
@@ -210,38 +328,48 @@ router.post("/upload-contract", (req, res) => {
         process.env.SETU_X_CLIENT_ID &&
         process.env.SETU_X_CLIENT_ID !== "your_client_id_here"
       ) {
-        // Setu was configured but the call failed — log the error
         console.error("[Setu] API call failed, falling back to mock:", setuError);
       }
     }
 
-    const signature: SignatureInfo = {
-      signatureId: setuSignatureId!,
-      signatureUrl: signatureUrl!,
-      status: "pending",
-      createdAt: now.toISOString(),
-      signedAt: null,
-      setuDocumentId,
-    };
+    // Upload to Supabase Storage (if configured)
+    let storageFilePath: string | undefined;
+    if (isSupabaseConfigured()) {
+      try {
+        storageFilePath = await supabase.uploadToStorage(file.path, file.originalname);
+      } catch (storageErr) {
+        console.warn("[Storage] Could not upload to Supabase:", storageErr);
+      }
+    }
 
+    // Store contract
+    const id = isSupabaseConfigured() ? 0 : memoryNextId++;
     const contract: Contract = {
-      id: nextId++,
+      id,
       documentId,
-      filename: file.filename,
+      filename: storageFilePath || file.filename,
       originalName: file.originalname,
       sizeBytes: file.size,
       status: "pending",
       uploadedAt: now.toISOString(),
       notes,
-      signature,
+      signature: {
+        signatureId: setuSignatureId!,
+        signatureUrl: signatureUrl!,
+        status: "pending",
+        createdAt: now.toISOString(),
+        signedAt: null,
+        setuDocumentId,
+      },
     };
 
-    contracts.push(contract);
+    await storeContract(contract);
 
     console.log(
       `Contract uploaded: ${contract.originalName}` +
-        ` (docId=${documentId}, sigId=${signature.signatureId}` +
+        ` (docId=${documentId}, sigId=${contract.signature.signatureId}` +
         (setuConfigured ? ", Setu=yes" : ", Setu=no (mock)") +
+        (isSupabaseConfigured() ? ", DB=Supabase" : ", DB=memory") +
         ")"
     );
 
@@ -253,6 +381,7 @@ router.post("/upload-contract", (req, res) => {
       originalName: contract.originalName,
       sizeBytes: contract.sizeBytes,
       setuConfigured,
+      storage: isSupabaseConfigured() ? "supabase" : "memory",
     });
   });
 });
@@ -260,37 +389,28 @@ router.post("/upload-contract", (req, res) => {
 /**
  * GET /api/signature-status/:id
  * Check the status of a signature request by its signature ID.
- * Fetches the latest status from Setu, then maps it to our internal status.
  */
 router.get("/signature-status/:id", async (req, res) => {
   const { id } = req.params;
 
-  const contract = contracts.find((c) => c.signature.signatureId === id);
+  const contract = await findContractBySignatureId(id);
   if (!contract) {
     res.status(404).json({ error: "Signature not found" });
     return;
   }
 
-  // If this contract was created via Setu, fetch live status from Setu
   if (contract.signature.setuDocumentId) {
     try {
-      const setuStatus = await getSignatureStatus(
-        contract.signature.signatureId
-      );
+      const setuStatus = await getSignatureStatus(contract.signature.signatureId);
 
       const { status, signedAt } = mapSetuStatus(
         setuStatus.status,
         setuStatus.updatedAt
       );
 
-      // Update our local record
-      contract.signature.status = status;
-      if (signedAt) {
-        contract.signature.signedAt = signedAt;
-      }
-      if (status === "signed") {
-        contract.status = "processed";
-      }
+      await updateContractSignature(contract.signature.signatureId, status, signedAt);
+
+      const updated = await findContractBySignatureId(id);
 
       res.json({
         signatureId: contract.signature.signatureId,
@@ -298,7 +418,7 @@ router.get("/signature-status/:id", async (req, res) => {
         originalName: contract.originalName,
         status,
         createdAt: contract.signature.createdAt,
-        signedAt: contract.signature.signedAt,
+        signedAt: signedAt || contract.signature.signedAt,
         signedDocumentAvailable: status === "signed",
         setuStatus: setuStatus.status,
         setuSigners: setuStatus.signers.map((s) => ({
@@ -309,36 +429,35 @@ router.get("/signature-status/:id", async (req, res) => {
       });
       return;
     } catch (setuError) {
-      console.error(
-        "[Setu] Failed to fetch live status, using local cache:",
-        setuError
-      );
-      // Fall through to return cached status
+      console.error("[Setu] Failed to fetch live status:", setuError);
     }
   }
 
-  // Return cached/local status (for mock signatures or failed Setu calls)
+  const cached = await findContractBySignatureId(id);
+  if (!cached) {
+    res.status(404).json({ error: "Signature not found" });
+    return;
+  }
+
   res.json({
-    signatureId: contract.signature.signatureId,
-    documentId: contract.documentId,
-    originalName: contract.originalName,
-    status: contract.signature.status,
-    createdAt: contract.signature.createdAt,
-    signedAt: contract.signature.signedAt,
-    signedDocumentAvailable: contract.signature.status === "signed",
+    signatureId: cached.signature.signatureId,
+    documentId: cached.documentId,
+    originalName: cached.originalName,
+    status: cached.signature.status,
+    createdAt: cached.signature.createdAt,
+    signedAt: cached.signature.signedAt,
+    signedDocumentAvailable: cached.signature.status === "signed",
   });
 });
 
 /**
  * GET /api/download/:id
  * Download a signed document by its signature ID.
- * For Setu contracts, proxies the file through our backend.
- * For mock contracts, serves the locally stored file.
  */
 router.get("/download/:id", async (req, res) => {
   const { id } = req.params;
 
-  const contract = contracts.find((c) => c.signature.signatureId === id);
+  const contract = await findContractBySignatureId(id);
   if (!contract) {
     res.status(404).json({ error: "Signature not found" });
     return;
@@ -365,11 +484,25 @@ router.get("/download/:id", async (req, res) => {
       (stream as any).pipe(res);
       return;
     } catch (setuError) {
-      console.error(
-        "[Setu] Failed to download from Setu, falling back to local:",
-        setuError
+      console.error("[Setu] Failed to download from Setu, falling back:", setuError);
+    }
+  }
+
+  // Try Supabase Storage first (if configured)
+  if (isSupabaseConfigured()) {
+    try {
+      const { data, contentType } = await supabase.downloadFromStorage(contract.filename);
+      const buffer = Buffer.from(data);
+
+      res.setHeader("Content-Type", contentType);
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="signed_${contract.originalName}"`
       );
-      // Fall through to try local file
+      res.send(buffer);
+      return;
+    } catch (storageErr) {
+      console.warn("[Storage] Could not download from Supabase:", storageErr);
     }
   }
 
@@ -389,24 +522,29 @@ router.get("/download/:id", async (req, res) => {
 });
 
 // ──────────────────────────────────────────────
-//  Internal/legacy routes (kept for compat)
+//  Internal/legacy routes
 // ──────────────────────────────────────────────
 
 // List all contracts
-router.get("/contracts", (_req, res) => {
-  const sorted = [...contracts].reverse();
-  res.json(sorted);
+router.get("/contracts", async (_req, res) => {
+  try {
+    const all = await findAllContracts();
+    res.json(all);
+  } catch (err) {
+    console.error("[DB] Failed to list contracts:", err);
+    res.status(500).json({ error: "Failed to list contracts" });
+  }
 });
 
 // Get contract by ID
-router.get("/contracts/:id", (req, res) => {
+router.get("/contracts/:id", async (req, res) => {
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) {
     res.status(400).json({ error: "Invalid contract ID" });
     return;
   }
 
-  const contract = contracts.find((c) => c.id === id);
+  const contract = await findContractById(id);
   if (!contract) {
     res.status(404).json({ error: "Contract not found" });
     return;
@@ -416,14 +554,14 @@ router.get("/contracts/:id", (req, res) => {
 });
 
 // Get signature status for a contract (by contract ID)
-router.get("/contracts/:id/signature", (req, res) => {
+router.get("/contracts/:id/signature", async (req, res) => {
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) {
     res.status(400).json({ error: "Invalid contract ID" });
     return;
   }
 
-  const contract = contracts.find((c) => c.id === id);
+  const contract = await findContractById(id);
   if (!contract) {
     res.status(404).json({ error: "Contract not found" });
     return;
@@ -432,15 +570,15 @@ router.get("/contracts/:id/signature", (req, res) => {
   res.json(contract.signature);
 });
 
-// Mock sign a document (by contract ID) — kept for demo
-router.post("/contracts/:id/sign", (req, res) => {
+// Mock sign a document (by contract ID)
+router.post("/contracts/:id/sign", async (req, res) => {
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) {
     res.status(400).json({ error: "Invalid contract ID" });
     return;
   }
 
-  const contract = contracts.find((c) => c.id === id);
+  const contract = await findContractById(id);
   if (!contract) {
     res.status(404).json({ error: "Contract not found" });
     return;
@@ -451,19 +589,24 @@ router.post("/contracts/:id/sign", (req, res) => {
     return;
   }
 
-  contract.signature.status = "signed";
-  contract.signature.signedAt = new Date().toISOString();
-  contract.status = "processed";
+  const now = new Date().toISOString();
+  await updateContractSignature(contract.signature.signatureId, "signed", now);
 
   console.log(`Document signed (mock): ${contract.documentId}`);
-  res.json(contract.signature);
+  res.json({
+    signatureId: contract.signature.signatureId,
+    signatureUrl: contract.signature.signatureUrl,
+    status: "signed" as const,
+    createdAt: contract.signature.createdAt,
+    signedAt: now,
+  });
 });
 
 // Look up signature by documentId (used by the signing page)
-router.get("/documents/:documentId/signature", (req, res) => {
+router.get("/documents/:documentId/signature", async (req, res) => {
   const { documentId } = req.params;
 
-  const contract = contracts.find((c) => c.documentId === documentId);
+  const contract = await findContractByDocumentId(documentId);
   if (!contract) {
     res.status(404).json({ error: "Document not found" });
     return;
@@ -473,10 +616,10 @@ router.get("/documents/:documentId/signature", (req, res) => {
 });
 
 // Mock sign by documentId (used by the signing page)
-router.post("/documents/:documentId/sign", (req, res) => {
+router.post("/documents/:documentId/sign", async (req, res) => {
   const { documentId } = req.params;
 
-  const contract = contracts.find((c) => c.documentId === documentId);
+  const contract = await findContractByDocumentId(documentId);
   if (!contract) {
     res.status(404).json({ error: "Document not found" });
     return;
@@ -487,31 +630,34 @@ router.post("/documents/:documentId/sign", (req, res) => {
     return;
   }
 
-  contract.signature.status = "signed";
-  contract.signature.signedAt = new Date().toISOString();
-  contract.status = "processed";
+  const now = new Date().toISOString();
+  await updateContractSignature(contract.signature.signatureId, "signed", now);
 
   console.log(`Document signed (mock): ${contract.documentId}`);
-  res.json(contract.signature);
+  res.json({
+    signatureId: contract.signature.signatureId,
+    signatureUrl: contract.signature.signatureUrl,
+    status: "signed" as const,
+    createdAt: contract.signature.createdAt,
+    signedAt: now,
+  });
 });
 
 // Delete a contract
-router.delete("/contracts/:id", (req, res) => {
+router.delete("/contracts/:id", async (req, res) => {
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) {
     res.status(400).json({ error: "Invalid contract ID" });
     return;
   }
 
-  const index = contracts.findIndex((c) => c.id === id);
-  if (index === -1) {
+  const contract = await removeContract(id);
+  if (!contract) {
     res.status(404).json({ error: "Contract not found" });
     return;
   }
 
-  const contract = contracts[index];
-  contracts.splice(index, 1);
-
+  // Clean up local file if it exists
   const filePath = path.join(uploadDir, contract.filename);
   try {
     if (fs.existsSync(filePath)) {
