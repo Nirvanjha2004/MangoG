@@ -5,14 +5,16 @@ import {
   PenLine,
   CheckCircle2,
   ExternalLink,
-  ArrowLeft,
   Loader2,
   ShieldCheck,
   Clock,
   AlertCircle,
+  Download,
+  ArrowLeft,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { NavHeader } from "@/components/nav-header";
 
 interface SignatureData {
   signatureId: string;
@@ -31,6 +33,7 @@ export function SignDocument() {
   const [signing, setSigning] = useState(false);
   const [signed, setSigned] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [downloading, setDownloading] = useState(false);
 
   const fetchSignatureStatus = useCallback(async () => {
     if (!documentId) {
@@ -97,6 +100,33 @@ export function SignDocument() {
     }
   }, [documentId]);
 
+  const handleDownload = useCallback(async () => {
+    if (!signature?.signatureId) return;
+    setDownloading(true);
+    try {
+      const res = await fetch(
+        `/api/signatures/${encodeURIComponent(signature.signatureId)}/download`
+      );
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to download document");
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "signed_document.pdf";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("Download failed:", err);
+    } finally {
+      setDownloading(false);
+    }
+  }, [signature]);
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-brand-50 flex items-center justify-center">
@@ -138,7 +168,7 @@ export function SignDocument() {
   if (signed) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-emerald-50 flex items-center justify-center p-6">
-        <Card className="max-w-md w-full">
+        <Card className="max-w-md w-full animate-scale-in">
           <CardContent className="p-8 text-center space-y-5">
             <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-emerald-100">
               <CheckCircle2 className="w-10 h-10 text-emerald-600" />
@@ -173,19 +203,21 @@ export function SignDocument() {
                 </span>
               </div>
             </div>
-            <div className="flex gap-3 justify-center">
-              <Button
-                variant="secondary"
-                onClick={() => window.close()}
-              >
-                Close
-              </Button>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <a href="/" className="flex-1">
+                <Button variant="secondary" className="w-full">
+                  Back to home
+                </Button>
+              </a>
               <Button
                 variant="primary"
-                disabled
-                title="Download will be available with a real e-signature provider"
+                className="flex-1"
+                onClick={handleDownload}
+                loading={downloading}
+                disabled={downloading}
               >
-                Download signed copy
+                <Download className="w-4 h-4" />
+                {downloading ? "Downloading..." : "Download signed copy"}
               </Button>
             </div>
           </CardContent>
@@ -195,23 +227,11 @@ export function SignDocument() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-brand-50">
-      {/* Top bar */}
-      <div className="border-b border-gray-200 bg-white/80 backdrop-blur-sm">
-        <div className="max-w-3xl mx-auto px-4 h-14 flex items-center justify-between">
-          <div className="flex items-center gap-2 text-sm text-gray-500">
-            <FileText className="w-4 h-4" />
-            <span className="font-medium text-gray-700">SignDocument</span>
-          </div>
-          <div className="flex items-center gap-3 text-xs text-gray-400">
-            <ShieldCheck className="w-3.5 h-3.5" />
-            Mock signing demo
-          </div>
-        </div>
-      </div>
+    <div className="min-h-screen bg-gradient-to-b from-gray-50 via-white to-brand-50">
+      <NavHeader />
 
       {/* Signing area */}
-      <div className="max-w-2xl mx-auto px-4 py-12 space-y-6">
+      <div className="max-w-2xl mx-auto px-4 py-12 space-y-6 animate-fade-in-up">
         {/* Document preview card */}
         <Card>
           <CardContent className="p-6 space-y-4">
@@ -330,18 +350,11 @@ export function SignDocument() {
         </Card>
 
         {/* Footer */}
-        <div className="text-center space-y-2">
+        <div className="text-center">
           <p className="text-xs text-gray-400">
             <ExternalLink className="w-3 h-3 inline mr-1" />
             This is a simulated signing page for demo purposes
           </p>
-          <a
-            href="/"
-            className="inline-flex items-center gap-1 text-xs text-brand-600 hover:text-brand-700 font-medium"
-          >
-            <ArrowLeft className="w-3 h-3" />
-            Back to upload
-          </a>
         </div>
       </div>
     </div>

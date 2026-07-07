@@ -4,6 +4,7 @@ import { cn, formatBytes } from "@/lib/utils";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import { NavHeader } from "@/components/nav-header";
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
 const ACCEPTED_TYPES = ["application/pdf"];
@@ -198,8 +199,10 @@ export function UploadContract() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-brand-50 flex flex-col items-center justify-center p-6">
-      <div className="w-full max-w-lg mx-auto space-y-8">
+    <div className="min-h-screen bg-gradient-to-b from-gray-50 via-white to-brand-50">
+      <NavHeader />
+
+      <div className="max-w-lg mx-auto px-4 pt-12 pb-16 space-y-8 animate-fade-in-up">
         {/* Header */}
         <div className="text-center space-y-2">
           <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-brand-100 text-brand-600 mb-3 shadow-sm">
@@ -355,16 +358,18 @@ export function UploadContract() {
                 </div>
 
                 {/* Success navigation */}
-                <Button onClick={reset} variant="ghost" className="w-full text-sm">
-                  Upload another file
-                </Button>
-                <a
-                  href="/status"
-                  className="flex items-center justify-center gap-1.5 text-sm text-brand-600 hover:text-brand-700 font-medium transition-colors"
-                >
-                  <Search className="w-3.5 h-3.5" />
-                  Check signature status
-                </a>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <Button onClick={reset} variant="secondary" className="flex-1 text-sm">
+                    <Upload className="w-4 h-4" />
+                    Upload another file
+                  </Button>
+                  <a href="/status" className="flex-1">
+                    <Button variant="primary" className="w-full text-sm">
+                      <Search className="w-4 h-4" />
+                      Check status
+                    </Button>
+                  </a>
+                </div>
               </div>
             )}
 
@@ -500,24 +505,15 @@ export function UploadContract() {
           </CardContent>
         </Card>
 
-        {/* Navigation & Guidelines */}
+        {/* Guidelines */}
         {uploadState === "idle" && (
-          <div className="space-y-4">
-            <a
-              href="/status"
-              className="flex items-center justify-center gap-2 text-sm text-brand-600 hover:text-brand-700 font-medium transition-colors"
-            >
-              <Search className="w-4 h-4" />
-              Check signature status
-            </a>
-            <div className="text-center">
-              <p className="text-xs text-gray-400">
-                By uploading, you agree to our{" "}
-                <span className="underline underline-offset-2 cursor-default">Terms of Service</span>{" "}
-                and{" "}
-                <span className="underline underline-offset-2 cursor-default">Privacy Policy</span>
-              </p>
-            </div>
+          <div className="text-center">
+            <p className="text-xs text-gray-400">
+              By uploading, you agree to our{" "}
+              <span className="underline underline-offset-2 cursor-default">Terms of Service</span>{" "}
+              and{" "}
+              <span className="underline underline-offset-2 cursor-default">Privacy Policy</span>
+            </p>
           </div>
         )}
       </div>

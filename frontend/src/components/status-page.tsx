@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   Search,
   FileText,
@@ -9,13 +9,14 @@ import {
   ShieldCheck,
   Download,
   Loader2,
-  ArrowLeft,
   FileWarning,
   History,
+  RefreshCw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { NavHeader } from "@/components/nav-header";
 
 interface ContractSummary {
   id: number;
@@ -50,6 +51,38 @@ export function StatusPage() {
   const [contracts, setContracts] = useState<ContractSummary[]>([]);
   const [loadingContracts, setLoadingContracts] = useState(true);
   const [downloading, setDownloading] = useState(false);
+  const [polling, setPolling] = useState(false);
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // ── Real-time polling for pending signatures ──
+  const startPolling = useCallback((signatureId: string) => {
+    if (pollingRef.current) clearInterval(pollingRef.current);
+    setPolling(true);
+
+    pollingRef.current = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/signatures/${encodeURIComponent(signatureId)}/status`);
+        if (!res.ok) return;
+        const data: SignatureStatus = await res.json();
+        setSignatureStatus(data);
+        if (data.status !== "pending") {
+          if (pollingRef.current) clearInterval(pollingRef.current);
+          pollingRef.current = null;
+          setPolling(false);
+        }
+      } catch {
+        // Silently fail during polling
+      }
+    }, 5000);
+  }, []);
+
+  const stopPolling = useCallback(() => {
+    if (pollingRef.current) {
+      clearInterval(pollingRef.current);
+      pollingRef.current = null;
+    }
+    setPolling(false);
+  }, []);
 
   // Fetch previous contracts
   useEffect(() => {
@@ -74,6 +107,7 @@ export function StatusPage() {
     const trimmed = signatureId.trim();
     if (!trimmed) return;
 
+    stopPolling();
     setSearching(true);
     setSearchError(null);
     setSignatureStatus(null);
@@ -90,6 +124,11 @@ export function StatusPage() {
       }
       const data: SignatureStatus = await res.json();
       setSignatureStatus(data);
+
+      // Start polling if the signature is still pending
+      if (data.status === "pending") {
+        startPolling(trimmed);
+      }
     } catch (err) {
       setSearchError(
         err instanceof Error ? err.message : "An unexpected error occurred"
@@ -97,7 +136,7 @@ export function StatusPage() {
     } finally {
       setSearching(false);
     }
-  }, []);
+  }, [startPolling, stopPolling]);
 
   const handleSearch = useCallback(
     (e: React.FormEvent) => {
@@ -143,12 +182,19 @@ export function StatusPage() {
       setDownloading(false);
     }
   }, [signatureStatus]);
+  // Cleanup polling on unmount
+  useEffect(() => {
+    return () => {
+      if (pollingRef.current) clearInterval(pollingRef.current);
+    };
+  }, []);
 
   const clearResults = useCallback(() => {
+    stopPolling();
     setSignatureStatus(null);
     setSearchError(null);
     setSearchInput("");
-  }, []);
+  }, [stopPolling]);
 
   const statusColor = (status: string) => {
     switch (status) {
@@ -203,10 +249,12 @@ export function StatusPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-brand-50 flex flex-col items-center p-6">
-      <div className="w-full max-w-2xl mx-auto space-y-8">
+    <div className="min-h-screen bg-gradient-to-b from-gray-50 via-white to-brand-50">
+      <NavHeader />
+
+      <div className="max-w-2xl mx-auto px-4 pt-12 pb-16 space-y-8 animate-fade-in-up">
         {/* Header */}
-        <div className="text-center space-y-2 pt-6">
+        <div className="text-center space-y-2">
           <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-brand-100 text-brand-600 mb-3 shadow-sm">
             <Search className="w-7 h-7" />
           </div>
@@ -216,13 +264,6 @@ export function StatusPage() {
           <p className="text-gray-500 text-base max-w-sm mx-auto">
             Check the status of a signature request or select a previous request
           </p>
-          <a
-            href="/"
-            className="inline-flex items-center gap-1 text-sm text-brand-600 hover:text-brand-700 font-medium"
-          >
-            <ArrowLeft className="w-3 h-3" />
-            Back to upload
-          </a>
         </div>
 
         {/* Search by Signature ID */}
@@ -294,13 +335,13 @@ export function StatusPage() {
         )}
 
         {signatureStatus && !searching && (
-          <Card className="overflow-hidden">
+          <Card className="overflow-hidden animate-scale-in">
             <CardHeader>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-3 min-w-0">
                   <div
                     className={cn(
-                      "w-10 h-10 rounded-xl flex items-center justify-center",
+                      "w-10 h-10 rounded-xl flex items-center justify-center shrink-0",
                       statusBg(signatureStatus.status)
                     )}
                   >
@@ -308,25 +349,33 @@ export function StatusPage() {
                       className={cn("w-5 h-5", statusColor(signatureStatus.status))}
                     />
                   </div>
-                  <div>
-                    <h3 className="font-semibold text-gray-900">
+                  <div className="min-w-0">
+                    <h3 className="font-semibold text-gray-900 truncate">
                       {signatureStatus.originalName}
                     </h3>
-                    <p className="text-xs text-gray-500 font-mono">
+                    <p className="text-xs text-gray-500 font-mono truncate">
                       {signatureStatus.signatureId}
                     </p>
                   </div>
                 </div>
-                <span
-                  className={cn(
-                    "inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium",
-                    statusBg(signatureStatus.status),
-                    statusColor(signatureStatus.status)
+                <div className="flex items-center gap-2 shrink-0">
+                  {polling && (
+                    <span className="inline-flex items-center gap-1 text-xs text-brand-600 animate-pulse-subtle">
+                      <RefreshCw className="w-3 h-3 animate-spin" />
+                      Live
+                    </span>
                   )}
-                >
-                  {statusIcon(signatureStatus.status)}
-                  {statusLabel(signatureStatus.status)}
-                </span>
+                  <span
+                    className={cn(
+                      "inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium",
+                      statusBg(signatureStatus.status),
+                      statusColor(signatureStatus.status)
+                    )}
+                  >
+                    {statusIcon(signatureStatus.status)}
+                    {statusLabel(signatureStatus.status)}
+                  </span>
+                </div>
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -375,7 +424,7 @@ export function StatusPage() {
 
               {/* Download section */}
               {signatureStatus.status === "signed" && (
-                <div className="rounded-lg border-2 border-emerald-200 bg-emerald-50 p-4 space-y-3">
+                <div className="rounded-lg border-2 border-emerald-200 bg-emerald-50 p-4 space-y-3 animate-fade-in">
                   <div className="flex items-center gap-2">
                     <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center">
                       <ShieldCheck className="w-4 h-4 text-emerald-600" />
@@ -403,13 +452,15 @@ export function StatusPage() {
               )}
 
               {signatureStatus.status === "pending" && (
-                <div className="rounded-lg bg-amber-50 border border-amber-200 p-4 text-center">
-                  <Clock className="w-5 h-5 text-amber-500 mx-auto mb-2" />
+                <div className="rounded-lg bg-amber-50 border border-amber-200 p-4 text-center animate-fade-in">
+                  <Clock className="w-5 h-5 text-amber-500 mx-auto mb-2 animate-pulse-subtle" />
                   <p className="text-sm text-gray-700 font-medium">
                     Waiting for signature
                   </p>
                   <p className="text-xs text-gray-500 mt-1">
-                    The document has not been signed yet. Check back later.
+                    {polling
+                      ? "Polling for status updates every 5 seconds..."
+                      : "The document has not been signed yet. Check back later."}
                   </p>
                 </div>
               )}
@@ -431,7 +482,7 @@ export function StatusPage() {
         )}
 
         {/* Previous contracts */}
-        <Card>
+        <Card className={cn(signatureStatus ? "opacity-70" : "")}>
           <CardContent className="p-6 space-y-4">
             <div className="flex items-center gap-2">
               <History className="w-5 h-5 text-gray-400" />
