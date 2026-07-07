@@ -61,7 +61,7 @@ export function StatusPage() {
 
     pollingRef.current = setInterval(async () => {
       try {
-        const res = await fetch(`/api/signatures/${encodeURIComponent(signatureId)}/status`);
+        const res = await fetch(`/api/signature-status/${encodeURIComponent(signatureId)}`);
         if (!res.ok) return;
         const data: SignatureStatus = await res.json();
         setSignatureStatus(data);
@@ -159,7 +159,7 @@ export function StatusPage() {
     setDownloading(true);
     try {
       const res = await fetch(
-        `/api/signatures/${encodeURIComponent(signatureStatus.signatureId)}/download`
+        `/api/download/${encodeURIComponent(signatureStatus.signatureId)}`
       );
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));

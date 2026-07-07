@@ -72,7 +72,7 @@ export function UploadContract() {
         setProgress(progressValue);
       }, 200);
 
-      const response = await fetch("/api/contracts/upload", {
+      const response = await fetch("/api/upload-contract", {
         method: "POST",
         body: formData,
         signal: controller.signal,

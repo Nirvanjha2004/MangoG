@@ -105,7 +105,7 @@ export function SignDocument() {
     setDownloading(true);
     try {
       const res = await fetch(
-        `/api/signatures/${encodeURIComponent(signature.signatureId)}/download`
+        `/api/download/${encodeURIComponent(signature.signatureId)}`
       );
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
