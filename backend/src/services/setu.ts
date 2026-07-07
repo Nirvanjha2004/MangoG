@@ -2,7 +2,7 @@ import fs from "fs";
 import path from "path";
 import { Readable } from "stream";
 
-// ── Types ──
+// ── Types ── (unchanged, keeping as-is)
 
 export interface SetuDocument {
   id: string;
@@ -93,18 +93,32 @@ function getConfig() {
       "x-client-id": clientId,
       "x-client-secret": clientSecret,
       "x-product-instance-id": productInstanceId,
-      "User-Agent": "MangoG/1.0",
+      "User-Agent":
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
       Accept: "application/json, */*",
+      "Accept-Language": "en-US,en;q=0.9",
     },
   };
 }
 
+// ── Diagnostic helper ──
+// Logs response metadata so we can tell WAF/CDN-level blocks apart from
+// genuine API errors. Especially useful for the raw-HTML 403 case.
+function logDiagnostics(label: string, response: Response) {
+  const cfRay = response.headers.get("cf-ray");
+  const server = response.headers.get("server");
+  console.warn(`[Setu][${label}] status=${response.status}`);
+  console.warn(`[Setu][${label}] server header=${server ?? "none"}`);
+  if (cfRay) {
+    console.warn(
+      `[Setu][${label}] cf-ray=${cfRay} → this request hit Cloudflare, ` +
+        `not Setu's app directly. Likely a WAF/bot-protection block on Render's IP.`
+    );
+  }
+}
+
 // ── API Client ──
 
-/**
- * Upload a PDF document to Setu.
- * Returns the document ID needed to create a signature request.
- */
 export async function uploadDocument(
   filePath: string,
   fileName: string
@@ -125,6 +139,8 @@ export async function uploadDocument(
     signal: AbortSignal.timeout(SETU_TIMEOUT_MS),
   });
 
+  logDiagnostics("uploadDocument", response);
+
   if (!response.ok) {
     const errorText = await response.text().catch(() => "Unknown error");
     throw new Error(
@@ -135,10 +151,6 @@ export async function uploadDocument(
   return response.json() as Promise<SetuDocument>;
 }
 
-/**
- * Create a signature request for a previously uploaded document.
- * Returns the signature request ID and signer URLs.
- */
 export async function createSignatureRequest(
   documentId: string,
   redirectUrl: string,
@@ -162,6 +174,8 @@ export async function createSignatureRequest(
     signal: AbortSignal.timeout(SETU_TIMEOUT_MS),
   });
 
+  logDiagnostics("createSignatureRequest", response);
+
   if (!response.ok) {
     const errorText = await response.text().catch(() => "Unknown error");
     throw new Error(
@@ -172,9 +186,6 @@ export async function createSignatureRequest(
   return response.json() as Promise<SetuCreateSignatureResponse>;
 }
 
-/**
- * Get the current status of a signature request by its Setu signature ID.
- */
 export async function getSignatureStatus(
   signatureId: string
 ): Promise<SetuSignatureStatusResponse> {
@@ -186,6 +197,8 @@ export async function getSignatureStatus(
     signal: AbortSignal.timeout(SETU_TIMEOUT_MS),
   });
 
+  logDiagnostics("getSignatureStatus", response);
+
   if (!response.ok) {
     const errorText = await response.text().catch(() => "Unknown error");
     throw new Error(
@@ -196,10 +209,6 @@ export async function getSignatureStatus(
   return response.json() as Promise<SetuSignatureStatusResponse>;
 }
 
-/**
- * Get the download URL for a signed document.
- * Only call this after the signature status is "sign_complete".
- */
 export async function getDownloadUrl(
   signatureId: string
 ): Promise<SetuDownloadResponse> {
@@ -214,6 +223,8 @@ export async function getDownloadUrl(
     }
   );
 
+  logDiagnostics("getDownloadUrl", response);
+
   if (!response.ok) {
     const errorText = await response.text().catch(() => "Unknown error");
     throw new Error(
@@ -224,10 +235,6 @@ export async function getDownloadUrl(
   return response.json() as Promise<SetuDownloadResponse>;
 }
 
-/**
- * Proxy-download a signed document from Setu and return it as a Readable stream.
- * This keeps Setu URLs hidden from the frontend.
- */
 export async function downloadSignedDocument(
   signatureId: string
 ): Promise<{ stream: Readable; contentType: string }> {
@@ -250,7 +257,6 @@ export async function downloadSignedDocument(
     throw new Error("Setu returned an empty response body");
   }
 
-  // Convert the web ReadableStream to a Node Readable
   const nodeStream = Readable.from(response.body as any);
 
   return { stream: nodeStream, contentType };
