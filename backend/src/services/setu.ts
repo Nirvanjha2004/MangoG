@@ -93,6 +93,8 @@ function getConfig() {
       "x-client-id": clientId,
       "x-client-secret": clientSecret,
       "x-product-instance-id": productInstanceId,
+      "User-Agent": "MangoG/1.0",
+      Accept: "application/json, */*",
     },
   };
 }
