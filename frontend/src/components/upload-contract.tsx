@@ -87,6 +87,7 @@ export function UploadContract() {
       }
 
       const result: UploadResult = await response.json();
+      console.log("The results are : " , result); 
       setUploadResult(result);
       setProgress(100);
       setFileInfo({ name: result.originalName, size: result.sizeBytes });
