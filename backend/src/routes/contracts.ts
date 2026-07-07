@@ -320,6 +320,7 @@ router.post("/upload-contract", (req, res) => {
       );
     } catch (setuError) {
       // If Setu is not configured, fall back to a mock signature
+      console.error("have recieved this error : ", setuError)
       const mockSigId = `sig_${crypto.randomBytes(12).toString("hex")}`;
       setuSignatureId = mockSigId;
       // Use Origin header (frontend URL) if available, otherwise fall back to host
