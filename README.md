@@ -58,25 +58,8 @@ A full-stack document signing application that integrates **Setu E-Sign API** fo
 
 ## Architecture Overview
 
-```
-┌──────────────────┐       ┌───────────────────┐       ┌──────────────────┐
-│                  │       │                   │       │                  │
-│   Vercel (CDN)   │──────▶│   Render (Node)   │──────▶│   Setu E-Sign    │
-│   React SPA      │  API  │   Express Server  │  API  │   Sandbox API    │
-│   (Static)       │◀──────│   (Node 18+)      │◀──────│   (Aadhaar)      │
-│                  │  JSON │                   │  JSON │                  │
-└──────────────────┘       └───────┬───────────┘       └──────────────────┘
-                                   │
-                                   │ REST
-                                   ▼
-                          ┌──────────────────┐
-                          │                  │
-                          │   Supabase       │
-                          │   PostgreSQL     │
-                          │   + Storage      │
-                          │                  │
-                          └──────────────────┘
-```
+<img width="937" height="700" alt="image" src="https://github.com/user-attachments/assets/6c7587c3-e8d0-457b-92be-79657a40f560" />
+
 
 ### Key Design Decisions
 
