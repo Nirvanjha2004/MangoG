@@ -290,6 +290,7 @@ router.post("/upload-contract", (req, res) => {
 
     try {
       // Step 1: Upload the PDF document to Setu
+      console.log(`[Setu] Starting upload for file: ${file.originalname} (${file.size} bytes)`);
       const doc = await uploadDocument(file.path, file.originalname);
       setuDocumentId = doc.id;
 
@@ -299,6 +300,8 @@ router.post("/upload-contract", (req, res) => {
       const redirectUrl =
         process.env.SETU_REDIRECT_URL ||
         `${req.protocol}://${req.get("host") || "localhost:3001"}/status`;
+
+      console.log(`[Setu] Using redirect URL: ${redirectUrl}`);
 
       // Append the state token to the redirect URL (Setu preserves custom query params)
       const redirectUrlWithState = `${redirectUrl}${redirectUrl.includes("?") ? "&" : "?"}state=${stateToken}`;
@@ -322,11 +325,29 @@ router.post("/upload-contract", (req, res) => {
       setuConfigured = true;
 
       console.log(
-        `[Setu] Signature request created: ${signatureReq.id} for document ${doc.id}`
+        `[Setu] ✅ Signature request created: ${signatureReq.id} for document ${doc.id}`
       );
     } catch (setuError) {
       // If Setu is not configured, fall back to a mock signature
-      console.error("have recieved this error : ", setuError)
+      console.error("=" .repeat(50));
+      console.error("[Setu] ❌ Setu API integration failed — falling back to mock:");
+      console.error(`[Setu] ❌ Timestamp: ${new Date().toISOString()}`);
+      console.error(`[Setu] ❌ Request URL: ${req.protocol}://${req.get("host") || "unknown"}${req.originalUrl}`);
+      if (setuError instanceof Error) {
+        console.error(`[Setu] ❌ Error message: ${setuError.message}`);
+        console.error(`[Setu] ❌ Error stack: ${setuError.stack}`);
+      } else {
+        console.error(`[Setu] ❌ Error (non-Error):`, setuError);
+      }
+      console.error(`[Setu] ❌ Environment:`);
+      console.error(`  SETU_BASE_URL: ${process.env.SETU_BASE_URL || "https://dg-sandbox.setu.co (default)"}`);
+      console.error(`  SETU_X_CLIENT_ID: ${process.env.SETU_X_CLIENT_ID ? "✅ set (" + process.env.SETU_X_CLIENT_ID.length + " chars)" : "❌ NOT SET"}`);
+      console.error(`  SETU_X_CLIENT_SECRET: ${process.env.SETU_X_CLIENT_SECRET ? "✅ set (" + process.env.SETU_X_CLIENT_SECRET.length + " chars)" : "❌ NOT SET"}`);
+      console.error(`  SETU_X_PRODUCT_INSTANCE_ID: ${process.env.SETU_X_PRODUCT_INSTANCE_ID ? "✅ set (" + process.env.SETU_X_PRODUCT_INSTANCE_ID.length + " chars)" : "❌ NOT SET"}`);
+      console.error(`  SETU_REDIRECT_URL: ${process.env.SETU_REDIRECT_URL || "❌ NOT SET"}`);
+      console.error(`  NODE_ENV: ${process.env.NODE_ENV || "not set"}`);
+      console.error("=" .repeat(50));
+
       const mockSigId = `sig_${crypto.randomBytes(12).toString("hex")}`;
       setuSignatureId = mockSigId;
       // Use Origin header (frontend URL) if available, otherwise fall back to host
@@ -337,7 +358,7 @@ router.post("/upload-contract", (req, res) => {
         process.env.SETU_X_CLIENT_ID &&
         process.env.SETU_X_CLIENT_ID !== "your_client_id_here"
       ) {
-        console.error("[Setu] API call failed, falling back to mock:", setuError);
+        console.error("[Setu] API call failed (credentials ARE set), falling back to mock. Check the logs above for details.");
       }
     }
 

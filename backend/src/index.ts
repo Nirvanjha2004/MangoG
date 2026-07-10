@@ -1,6 +1,7 @@
 import "dotenv/config";
 import app from "./app.js";
 import { ensureStorageBucket } from "./services/supabase.js";
+import { logSetuConfig } from "./services/setu.js";
 
 const PORT = parseInt(process.env.PORT || "3001", 10);
 
@@ -44,6 +45,9 @@ async function start() {
     console.log("ℹ️  Supabase not configured — using in-memory storage");
     console.log("   Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in backend/.env to persist data");
   }
+
+  // Log Setu configuration at startup for debugging deployment issues
+  logSetuConfig();
 
   app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`)
