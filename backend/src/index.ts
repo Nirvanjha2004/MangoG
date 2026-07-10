@@ -1,6 +1,6 @@
 import "dotenv/config";
 import app from "./app.js";
-import { runMigrations, ensureStorageBucket } from "./services/supabase.js";
+import { ensureStorageBucket } from "./services/supabase.js";
 
 const PORT = parseInt(process.env.PORT || "3001", 10);
 
@@ -32,10 +32,9 @@ function checkRuntime() {
 async function start() {
   checkRuntime();
 
-  // Attempt to set up Supabase (non-blocking — falls back to in-memory if not configured)
+  // Supabase is optional at runtime.
   if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
     try {
-      await runMigrations();
       await ensureStorageBucket();
       console.log("✅ Supabase connected and ready");
     } catch (dbErr) {
@@ -47,18 +46,7 @@ async function start() {
   }
 
   app.listen(PORT, () => {
-    console.log(`Server listening on http://localhost:${PORT}`);
-    console.log(`Setu base URL: ${process.env.SETU_BASE_URL || "https://dg-sandbox.setu.co"}`);
-    if (!process.env.SETU_X_CLIENT_ID || !process.env.SETU_X_CLIENT_SECRET || !process.env.SETU_X_PRODUCT_INSTANCE_ID) {
-      const missing = [];
-      if (!process.env.SETU_X_CLIENT_ID) missing.push("SETU_X_CLIENT_ID");
-      if (!process.env.SETU_X_CLIENT_SECRET) missing.push("SETU_X_CLIENT_SECRET");
-      if (!process.env.SETU_X_PRODUCT_INSTANCE_ID) missing.push("SETU_X_PRODUCT_INSTANCE_ID");
-
-      console.warn(`⚠️  Setu credentials not configured — missing: ${missing.join(", ")}`);
-      console.warn("   Uploads will use mock signatures until you add these to the environment.");
-      console.warn("   See backend/.env.example for the required variables.");
-    }
+    console.log(`Server is running on port ${PORT}`)
   });
 }
 

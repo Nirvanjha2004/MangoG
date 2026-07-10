@@ -1,6 +1,5 @@
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import fs from "fs";
-import path from "path";
 import crypto from "crypto";
 
 // ── Types ──
@@ -78,51 +77,7 @@ function getClient(): SupabaseClient {
   return _client;
 }
 
-// ── SQL migration (run on first connect) ──
 
-const MIGRATION_SQL = `
-CREATE TABLE IF NOT EXISTS contracts (
-  id BIGSERIAL PRIMARY KEY,
-  document_id TEXT UNIQUE NOT NULL,
-  filename TEXT NOT NULL,
-  original_name TEXT NOT NULL,
-  size_bytes BIGINT NOT NULL,
-  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'processed', 'failed')),
-  uploaded_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  notes TEXT,
-  signature_id TEXT UNIQUE NOT NULL,
-  signature_url TEXT NOT NULL,
-  signature_status TEXT NOT NULL DEFAULT 'pending' CHECK (signature_status IN ('pending', 'signed', 'expired')),
-  signature_created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  signature_signed_at TIMESTAMPTZ,
-  setu_document_id TEXT,
-  storage_file_path TEXT
-);
-
-CREATE INDEX IF NOT EXISTS idx_contracts_signature_id ON contracts(signature_id);
-CREATE INDEX IF NOT EXISTS idx_contracts_document_id ON contracts(document_id);
-`;
-
-/**
- * Check if the contracts table exists. Warns the user if not.
- * The actual migration SQL should be run from the Supabase dashboard SQL Editor.
- * See backend/src/db/migrations/001_initial.sql for the full SQL.
- */
-export async function runMigrations(): Promise<void> {
-  try {
-    const client = getClient();
-    const { error } = await client.from("contracts").select("id", { count: "exact", head: true }).limit(1);
-    if (error && error.code === "42P01") {
-      console.warn("");
-      console.warn("⚠️  Supabase table 'contracts' does not exist!");
-      console.warn("   Run the SQL from backend/src/db/migrations/001_initial.sql");
-      console.warn("   in your Supabase dashboard SQL Editor.");
-      console.warn("");
-    }
-  } catch (err) {
-    // Migration check failed — not configured yet, that's fine
-  }
-}
 
 // ── Row ↔ Contract conversion ──
 
