@@ -10,6 +10,7 @@ import {
   getSignatureStatus,
   downloadSignedDocument,
 } from "../services/setu.js";
+import { createStateToken } from "./webhook.js";
 import * as supabase from "../services/supabase.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -293,11 +294,16 @@ router.post("/upload-contract", (req, res) => {
       setuDocumentId = doc.id;
 
       // Step 2: Create a signature request on Setu
+      // Generate a state token for CSRF protection when the redirect callback comes back
+      const stateToken = createStateToken();
       const redirectUrl =
         process.env.SETU_REDIRECT_URL ||
         `${req.protocol}://${req.get("host") || "localhost:3001"}/status`;
 
-      const signatureReq = await createSignatureRequest(doc.id, redirectUrl, [
+      // Append the state token to the redirect URL (Setu preserves custom query params)
+      const redirectUrlWithState = `${redirectUrl}${redirectUrl.includes("?") ? "&" : "?"}state=${stateToken}`;
+
+      const signatureReq = await createSignatureRequest(doc.id, redirectUrlWithState, [
         {
           identifier: "9876543210",
           displayName: "Contract Signer",

@@ -1,6 +1,7 @@
 import express from "express";
 import cors from "cors";
 import { contractsRouter } from "./routes/contracts.js";
+import { webhookRouter } from "./routes/webhook.js";
 
 const app = express();
 
@@ -10,6 +11,7 @@ app.use(express.urlencoded({ extended: true }));
 
 // Routes
 app.use("/api", contractsRouter);
+app.use("/api/webhook", webhookRouter);
 
 // Health check
 app.get("/api/health", (_req, res) => {
