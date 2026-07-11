@@ -2,6 +2,7 @@ import "dotenv/config";
 import app from "./app.js";
 import { ensureStorageBucket } from "./services/supabase.js";
 import { logSetuConfig } from "./services/setu.js";
+import { logProxyConfig, getOutboundIP } from "./config/proxy.js";
 
 const PORT = parseInt(process.env.PORT || "3001", 10);
 
@@ -48,6 +49,15 @@ async function start() {
 
   // Log Setu configuration at startup for debugging deployment issues
   logSetuConfig();
+
+  // Log Webshare proxy configuration
+  logProxyConfig();
+
+  // Verify proxy by checking outbound IP (non-blocking — won't delay startup)
+  getOutboundIP().catch((err) => {
+    console.error(`[Startup] ⚠️  Proxy verification failed (non-fatal):`);
+    console.error(`[Startup] ⚠️  ${err instanceof Error ? err.message : String(err)}`);
+  });
 
   app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`)

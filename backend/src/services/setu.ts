@@ -1,6 +1,6 @@
 import fs from "fs";
-import path from "path";
 import { Readable } from "stream";
+import { proxyDispatcher } from "../config/proxy.js";
 
 // ── Types ──
 
@@ -300,8 +300,9 @@ export async function uploadDocument(
       method: "POST",
       headers,
       body: formData,
+      dispatcher: proxyDispatcher,
       signal: AbortSignal.timeout(SETU_TIMEOUT_MS),
-    });
+    } as any);
   } catch (err) {
     const elapsed = Date.now() - startTime;
     console.error(`[Setu][uploadDocument] ❌ NETWORK ERROR after ${elapsed}ms:`);
@@ -310,8 +311,10 @@ export async function uploadDocument(
     console.error(`  Error:  ${err instanceof Error ? err.message : String(err)}`);
     console.error(`  Stack:  ${err instanceof Error ? err.stack : "(no stack)"}`);
     console.error(`  Headers used: ${JSON.stringify(maskHeaders(headers), null, 4)}`);
+    console.error(`  ℹ️  Request was routed through Webshare proxy (p.webshare.io:80)`);
+    console.error(`  ℹ️  If this error persists, check: WEBSHARE_PROXY_USERNAME / WEBSHARE_PROXY_PASSWORD`);
     throw new Error(
-      `Setu uploadDocument network error after ${elapsed}ms: ${err instanceof Error ? err.message : String(err)}`
+      `Setu uploadDocument network error after ${elapsed}ms (via Webshare proxy): ${err instanceof Error ? err.message : String(err)}`
     );
   }
 
@@ -374,8 +377,9 @@ export async function createSignatureRequest(
       method: "POST",
       headers: requestHeaders,
       body: JSON.stringify(body),
+      dispatcher: proxyDispatcher,
       signal: AbortSignal.timeout(SETU_TIMEOUT_MS),
-    });
+    } as any);
   } catch (err) {
     const elapsed = Date.now() - startTime;
     console.error(`[Setu][createSignatureRequest] ❌ NETWORK ERROR after ${elapsed}ms:`);
@@ -384,8 +388,10 @@ export async function createSignatureRequest(
     console.error(`  Error:  ${err instanceof Error ? err.message : String(err)}`);
     console.error(`  Stack:  ${err instanceof Error ? err.stack : "(no stack)"}`);
     console.error(`  Headers used: ${JSON.stringify(maskHeaders(requestHeaders), null, 4)}`);
+    console.error(`  ℹ️  Request was routed through Webshare proxy (p.webshare.io:80)`);
+    console.error(`  ℹ️  If this error persists, check: WEBSHARE_PROXY_USERNAME / WEBSHARE_PROXY_PASSWORD`);
     throw new Error(
-      `Setu createSignatureRequest network error after ${elapsed}ms: ${err instanceof Error ? err.message : String(err)}`
+      `Setu createSignatureRequest network error after ${elapsed}ms (via Webshare proxy): ${err instanceof Error ? err.message : String(err)}`
     );
   }
 
@@ -424,8 +430,9 @@ export async function getSignatureStatus(
     response = await fetch(url, {
       method: "GET",
       headers,
+      dispatcher: proxyDispatcher,
       signal: AbortSignal.timeout(SETU_TIMEOUT_MS),
-    });
+    } as any);
   } catch (err) {
     const elapsed = Date.now() - startTime;
     console.error(`[Setu][getSignatureStatus] ❌ NETWORK ERROR after ${elapsed}ms:`);
@@ -434,8 +441,10 @@ export async function getSignatureStatus(
     console.error(`  Error:  ${err instanceof Error ? err.message : String(err)}`);
     console.error(`  Stack:  ${err instanceof Error ? err.stack : "(no stack)"}`);
     console.error(`  Headers used: ${JSON.stringify(maskHeaders(headers), null, 4)}`);
+    console.error(`  ℹ️  Request was routed through Webshare proxy (p.webshare.io:80)`);
+    console.error(`  ℹ️  If this error persists, check: WEBSHARE_PROXY_USERNAME / WEBSHARE_PROXY_PASSWORD`);
     throw new Error(
-      `Setu getSignatureStatus network error after ${elapsed}ms: ${err instanceof Error ? err.message : String(err)}`
+      `Setu getSignatureStatus network error after ${elapsed}ms (via Webshare proxy): ${err instanceof Error ? err.message : String(err)}`
     );
   }
 
@@ -473,8 +482,9 @@ export async function getDownloadUrl(
     response = await fetch(url, {
       method: "GET",
       headers,
+      dispatcher: proxyDispatcher,
       signal: AbortSignal.timeout(SETU_TIMEOUT_MS),
-    });
+    } as any);
   } catch (err) {
     const elapsed = Date.now() - startTime;
     console.error(`[Setu][getDownloadUrl] ❌ NETWORK ERROR after ${elapsed}ms:`);
@@ -483,8 +493,10 @@ export async function getDownloadUrl(
     console.error(`  Error:  ${err instanceof Error ? err.message : String(err)}`);
     console.error(`  Stack:  ${err instanceof Error ? err.stack : "(no stack)"}`);
     console.error(`  Headers used: ${JSON.stringify(maskHeaders(headers), null, 4)}`);
+    console.error(`  ℹ️  Request was routed through Webshare proxy (p.webshare.io:80)`);
+    console.error(`  ℹ️  If this error persists, check: WEBSHARE_PROXY_USERNAME / WEBSHARE_PROXY_PASSWORD`);
     throw new Error(
-      `Setu getDownloadUrl network error after ${elapsed}ms: ${err instanceof Error ? err.message : String(err)}`
+      `Setu getDownloadUrl network error after ${elapsed}ms (via Webshare proxy): ${err instanceof Error ? err.message : String(err)}`
     );
   }
 
@@ -526,16 +538,19 @@ export async function downloadSignedDocument(
   let response: Response;
   try {
     response = await fetch(downloadUrl, {
+      dispatcher: proxyDispatcher,
       signal: AbortSignal.timeout(SETU_TIMEOUT_MS),
-    });
+    } as any);
   } catch (err) {
     const elapsed = Date.now() - startTime;
     console.error(`[Setu][downloadSignedDocument] ❌ NETWORK ERROR after ${elapsed}ms:`);
     console.error(`  URL:    ${downloadUrl}`);
     console.error(`  Error:  ${err instanceof Error ? err.message : String(err)}`);
     console.error(`  Stack:  ${err instanceof Error ? err.stack : "(no stack)"}`);
+    console.error(`  ℹ️  Request was routed through Webshare proxy (p.webshare.io:80)`);
+    console.error(`  ℹ️  If this error persists, check: WEBSHARE_PROXY_USERNAME / WEBSHARE_PROXY_PASSWORD`);
     throw new Error(
-      `Failed to fetch signed document from Setu after ${elapsed}ms: ${err instanceof Error ? err.message : String(err)}`
+      `Failed to fetch signed document from Setu after ${elapsed}ms (via Webshare proxy): ${err instanceof Error ? err.message : String(err)}`
     );
   }
 
