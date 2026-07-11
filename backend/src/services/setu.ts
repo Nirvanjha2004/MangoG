@@ -1,3 +1,9 @@
+import { fetch } from "undici"; // ← CRITICAL: must import fetch from undici, not use the global one.
+// Node's built-in global fetch is a separate instance from the undici package's
+// fetch. Passing an undici ProxyAgent as `dispatcher` to the global fetch is
+// silently ignored (no error thrown) — requests go out directly, bypassing the
+// proxy entirely. This was the root cause of the proxy check passing while
+// actual Setu API calls still hit Render's un-whitelisted IP.
 import fs from "fs";
 import { Readable } from "stream";
 import { proxyDispatcher } from "../config/proxy.js";
@@ -296,6 +302,7 @@ export async function uploadDocument(
   const startTime = Date.now();
   let response: Response;
   try {
+    //@ts-ignore
     response = await fetch(url, {
       method: "POST",
       headers,
@@ -311,7 +318,7 @@ export async function uploadDocument(
     console.error(`  Error:  ${err instanceof Error ? err.message : String(err)}`);
     console.error(`  Stack:  ${err instanceof Error ? err.stack : "(no stack)"}`);
     console.error(`  Headers used: ${JSON.stringify(maskHeaders(headers), null, 4)}`);
-    console.error(`  ℹ️  Request was routed through Webshare proxy (p.webshare.io:80)`);
+    console.error(`  ℹ️  Request was routed through Webshare proxy (31.59.20.176:6754)`);
     console.error(`  ℹ️  If this error persists, check: WEBSHARE_PROXY_USERNAME / WEBSHARE_PROXY_PASSWORD`);
     throw new Error(
       `Setu uploadDocument network error after ${elapsed}ms (via Webshare proxy): ${err instanceof Error ? err.message : String(err)}`
@@ -373,6 +380,8 @@ export async function createSignatureRequest(
   const startTime = Date.now();
   let response: Response;
   try {
+        //@ts-ignore
+
     response = await fetch(url, {
       method: "POST",
       headers: requestHeaders,
@@ -388,7 +397,7 @@ export async function createSignatureRequest(
     console.error(`  Error:  ${err instanceof Error ? err.message : String(err)}`);
     console.error(`  Stack:  ${err instanceof Error ? err.stack : "(no stack)"}`);
     console.error(`  Headers used: ${JSON.stringify(maskHeaders(requestHeaders), null, 4)}`);
-    console.error(`  ℹ️  Request was routed through Webshare proxy (p.webshare.io:80)`);
+    console.error(`  ℹ️  Request was routed through Webshare proxy (31.59.20.176:6754)`);
     console.error(`  ℹ️  If this error persists, check: WEBSHARE_PROXY_USERNAME / WEBSHARE_PROXY_PASSWORD`);
     throw new Error(
       `Setu createSignatureRequest network error after ${elapsed}ms (via Webshare proxy): ${err instanceof Error ? err.message : String(err)}`
@@ -427,6 +436,8 @@ export async function getSignatureStatus(
   const startTime = Date.now();
   let response: Response;
   try {
+        //@ts-ignore
+
     response = await fetch(url, {
       method: "GET",
       headers,
@@ -441,7 +452,7 @@ export async function getSignatureStatus(
     console.error(`  Error:  ${err instanceof Error ? err.message : String(err)}`);
     console.error(`  Stack:  ${err instanceof Error ? err.stack : "(no stack)"}`);
     console.error(`  Headers used: ${JSON.stringify(maskHeaders(headers), null, 4)}`);
-    console.error(`  ℹ️  Request was routed through Webshare proxy (p.webshare.io:80)`);
+    console.error(`  ℹ️  Request was routed through Webshare proxy (31.59.20.176:6754)`);
     console.error(`  ℹ️  If this error persists, check: WEBSHARE_PROXY_USERNAME / WEBSHARE_PROXY_PASSWORD`);
     throw new Error(
       `Setu getSignatureStatus network error after ${elapsed}ms (via Webshare proxy): ${err instanceof Error ? err.message : String(err)}`
@@ -479,6 +490,8 @@ export async function getDownloadUrl(
   const startTime = Date.now();
   let response: Response;
   try {
+        //@ts-ignore
+
     response = await fetch(url, {
       method: "GET",
       headers,
@@ -493,7 +506,7 @@ export async function getDownloadUrl(
     console.error(`  Error:  ${err instanceof Error ? err.message : String(err)}`);
     console.error(`  Stack:  ${err instanceof Error ? err.stack : "(no stack)"}`);
     console.error(`  Headers used: ${JSON.stringify(maskHeaders(headers), null, 4)}`);
-    console.error(`  ℹ️  Request was routed through Webshare proxy (p.webshare.io:80)`);
+    console.error(`  ℹ️  Request was routed through Webshare proxy (31.59.20.176:6754)`);
     console.error(`  ℹ️  If this error persists, check: WEBSHARE_PROXY_USERNAME / WEBSHARE_PROXY_PASSWORD`);
     throw new Error(
       `Setu getDownloadUrl network error after ${elapsed}ms (via Webshare proxy): ${err instanceof Error ? err.message : String(err)}`
@@ -537,6 +550,7 @@ export async function downloadSignedDocument(
   const startTime = Date.now();
   let response: Response;
   try {
+    //@ts-ignore
     response = await fetch(downloadUrl, {
       dispatcher: proxyDispatcher,
       signal: AbortSignal.timeout(SETU_TIMEOUT_MS),
@@ -547,7 +561,7 @@ export async function downloadSignedDocument(
     console.error(`  URL:    ${downloadUrl}`);
     console.error(`  Error:  ${err instanceof Error ? err.message : String(err)}`);
     console.error(`  Stack:  ${err instanceof Error ? err.stack : "(no stack)"}`);
-    console.error(`  ℹ️  Request was routed through Webshare proxy (p.webshare.io:80)`);
+    console.error(`  ℹ️  Request was routed through Webshare proxy (31.59.20.176:6754)`);
     console.error(`  ℹ️  If this error persists, check: WEBSHARE_PROXY_USERNAME / WEBSHARE_PROXY_PASSWORD`);
     throw new Error(
       `Failed to fetch signed document from Setu after ${elapsed}ms (via Webshare proxy): ${err instanceof Error ? err.message : String(err)}`
